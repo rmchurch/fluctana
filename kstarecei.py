@@ -19,25 +19,28 @@ VN = 24  # number of vertical arrays
 
 
 class KstarEcei(object):
-    def __init__(self, shot, clist):
+    def __init__(self, shot, clist, data_path=None):
         self.shot = shot
-
-        if 5073 < shot and shot < 6393:
-            self.data_path = '/eceidata/exp_2011/ECEI/DATA_H5/'
-        elif 7065 < shot and shot < 8225:
-            self.data_path = '/eceidata/exp_2012/'
-        elif 8639 < shot and shot < 9427:
-            self.data_path = '/eceidata/exp_2013/'
-        elif 9741 < shot and shot < 11723:
-            self.data_path = '/eceidata/exp_2014/'
-        elif 12272 < shot and shot < 14942:
-            self.data_path = '/eceidata/exp_2015/'
-        elif 14941 < shot and shot < 17356:
-            self.data_path = '/eceidata2/exp_2016/'
-        elif 17963 < shot and shot < 19392:
-            self.data_path = '/eceidata2/exp_2017/'
-        elif 19391 < shot:
-            self.data_path = '/eceidata2/exp_2018/'
+        
+        if data_path is not None:
+            self.data_path = data_path
+        else:
+            if 5073 < shot and shot < 6393:
+                self.data_path = '/eceidata/exp_2011/ECEI/DATA_H5/'
+            elif 7065 < shot and shot < 8225:
+                self.data_path = '/eceidata/exp_2012/'
+            elif 8639 < shot and shot < 9427:
+                self.data_path = '/eceidata/exp_2013/'
+            elif 9741 < shot and shot < 11723:
+                self.data_path = '/eceidata/exp_2014/'
+            elif 12272 < shot and shot < 14942:
+                self.data_path = '/eceidata/exp_2015/'
+            elif 14941 < shot and shot < 17356:
+                self.data_path = '/eceidata2/exp_2016/'
+            elif 17963 < shot and shot < 19392:
+                self.data_path = '/eceidata2/exp_2017/'
+            elif 19391 < shot:
+                self.data_path = '/eceidata2/exp_2018/'
 
         self.clist = expand_clist(clist)
 
@@ -131,7 +134,7 @@ class KstarEcei(object):
 
         return time, data
 
-    def time_base(self, trange):
+    def time_base_full(self):
         # using self.tt, self.toff, self.fs; get self.time
         tt = self.tt
         toff = self.toff
@@ -159,19 +162,22 @@ class KstarEcei(object):
             if len(fulltime) > ENUM:
                 break
 
-        fulltime = fulltime[0:(ENUM+1)]
+        return fulltime[0:ENUM] #RMC - Changed from (ENUM+1), to make array size ENUM
+
+    def time_base(self, trange):
+        fulltime = self.time_base_full()
 
         idx = np.where((fulltime >= trange[0])*(fulltime <= trange[1]))
         idx1 = int(idx[0][0])
-        idx2 = int(idx[0][-1]+2)
+        idx2 = int(idx[0][-1]+1)
 
-        if toff < 0:
-            oidx = np.where((fulltime >= toff)*(fulltime <= toff+0.01))
+        if self.toff < 0:
+            oidx = np.where((fulltime >= self.toff)*(fulltime <= self.toff+0.01))
             oidx1 = int(oidx[0][0])
-            oidx2 = int(oidx[0][-1]+2)
+            oidx2 = int(oidx[0][-1]+1)
         else:
             print('#### offset from end in KstarEcei.time_base ####')
-            oidx1 = int(ENUM - 0.01*fs)
+            oidx1 = int(ENUM - 0.01*self.fs)
             oidx2 = int(ENUM - 1)
 
         return fulltime[idx1:idx2], idx1, idx2, oidx1, oidx2

@@ -19,7 +19,7 @@ import pickle
 
 from kstarecei import *
 from kstarmir import *
-from kstarmds import *
+#from kstarmds import *
 #from diiiddata import *  # needs pidly
 
 import specs as sp
@@ -459,6 +459,8 @@ class FluctAna(object):
             self.Dlist[dtwo].val[c,:] = sp.cross_phase(XX, YY)
 
     def correlation(self, done=0, dtwo=1):
+        """Calculates the coorrelation between two channel sets, done and dtwo
+        """
         # reguire full FFT
         # positive time lag = ref -> cmp
         self.Dlist[dtwo].vkind = 'correlation'
