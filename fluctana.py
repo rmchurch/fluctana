@@ -7,7 +7,6 @@
 # Last updated
 #  2018.03.23 : version 0.10; even nfft -> odd nfft (for symmetry)
 
-
 from scipy import signal
 import math
 import itertools
@@ -24,6 +23,7 @@ from kstarmir import *
 
 import specs as sp
 import stats as st
+import massdata as ms
 import filtdata as ft
 
 # CM = plt.cm.get_cmap('RdYlBu_r')
@@ -43,16 +43,16 @@ class FluctData(object):
         self.zpos = zpos # 1XM [channel]
         self.apos = apos # 1XM [channel]
 
-    def get_data(self, trange, norm=1, atrange=[1.0, 1.01], res=0):
+    def get_data(self, trange, norm=1, atrange=[1.0, 1.01], res=0, verbose=1):
         # trim, normalize data
         self.trange = trange
 
         if norm == 0:
-            print('data is not normalized')
+            if verbose == 1: print('Data is not normalized')
         elif norm == 1:
-            print('data is normalized by trange average')
+            if verbose == 1: print('Data is normalized by trange average')
         elif norm == 2:
-            print('data is normalized by atrange average')
+            if verbose == 1: print('Data is normalized by atrange average')
 
         # trim time
         time, idx1, idx2 = self.time_base(trange)
@@ -96,9 +96,9 @@ class FluctAna(object):
     def __init__(self):
         self.Dlist = []
 
-    def add_data(self, D, trange, norm=1, atrange=[1.0, 1.01], res=0):
+    def add_data(self, D, trange, norm=1, atrange=[1.0, 1.01], res=0, verbose=1):
 
-        D.get_data(trange, norm=norm, atrange=atrange, res=res)
+        D.get_data(trange, norm=norm, atrange=atrange, res=res, verbose=verbose)
         self.Dlist.append(D)
 
     def del_data(self, dnum):
@@ -201,54 +201,27 @@ class FluctAna(object):
 
 ############################# data filtering functions #########################
 
-    def filt(self, name, fL, fH, b=0.08, verbose=0):
-        for d, D in enumerate(self.Dlist):
+    def filt(self, dnum, name, fL, fH, b=0.08, verbose=0):
+        D = self.Dlist[dnum]
 
-            cnum = len(D.data)
+        # select filter except svd
+        if name[0:3] == 'FIR': 
+            filter = ft.FirFilter(name, D.fs, fL, fH, b)
 
-            # plot dimension
-            if cnum < 4:
-                row = cnum
-            else:
-                row = 4
-            col = math.ceil(cnum/row)
+        for c in range(len(D.clist)):
+            x = np.copy(D.data[c,:])
+            D.data[c,:] = filter.apply(x)
 
-            if name[0:3] == 'FIR': # for FIR filters
-                filter = ft.FirFilter(name, D.fs, fL, fH, b)
+        print('dnum {:d} filter {:s} with fL {:g} fH {:g} b {:g}'.format(dnum, name, fL, fH, b))
 
-            for c in range(cnum):
-                x = np.copy(D.data[c,:])
-                D.data[c,:] = filter.apply(x)
+    def svd_filt(self, dnum, cutoff=0.9, verbose=0):
+        D = self.Dlist[dnum]
 
-                if verbose == 1:
-                    # plot info
-                    pshot = D.shot
-                    pname = D.clist[c]
+        svd = ft.SvdFilter(cutoff = cutoff)
 
-                    # set axes
-                    if c == 0:
-                        plt.subplots_adjust(hspace = 0.5, wspace = 0.3)
-                        axes1 = plt.subplot(row,col,c+1)
-                        axprops = dict(sharex = axes1, sharey = axes1)
-                    elif c > 0:
-                        plt.subplot(row,col,c+1, **axprops)
+        D.data = svd.apply(D.data, verbose=verbose)
 
-                    plt.plot(D.time, x)
-                    plt.plot(D.time, D.data[c,:])
-
-                    plt.title('#{:d}, {:s}'.format(pshot, pname), fontsize=10)
-
-            print('dnum {:d} filter {:s} with fL {:g} fH {:g} b {:g}'.format(d, name, fL, fH, b))
-
-            if verbose == 1: plt.show()
-
-
-    def svd_filt(self, cutoff=0.9, verbose=0):
-        for d, D in enumerate(self.Dlist):
-            svd = ft.SvdFilter(cutoff = cutoff)
-            D.data = svd.apply(D.data, verbose=verbose)
-
-            print('dnum {:d} svd filter with cutoff {:g}'.format(d, cutoff))
+        print('dnum {:d} svd filter with cutoff {:g}'.format(dnum, cutoff))
 
 ############################# spectral methods #############################
 
@@ -809,7 +782,7 @@ class FluctAna(object):
 
             plt.show()
 
-    def nonlin_evolution(self, done=0, dtwo=1, dt=1.0, wit=1, js=1, test=0, **kwargs):
+    def nonlin_evolution(self, done=0, dtwo=1, delta=1.0, wit=1, js=1, test=0, **kwargs):
         if 'xlimits' in kwargs: xlimits = kwargs['xlimits']
 
         # rnum = cnum = 1 or 2
@@ -832,82 +805,94 @@ class FluctAna(object):
         self.Dlist[dtwo].val = np.zeros((cnum, len(ax1), len(ax2)))
 
         # obtain XX and YY
-        if cnum == 1:
-            # reference channel
-            rname = self.Dlist[done].clist[0]
-            XX = self.Dlist[done].spdata[0,:,:]
-            self.Dlist[dtwo].rname.append(rname)
-            # cmp channel
-            pname = self.Dlist[dtwo].clist[0]
-            YY = self.Dlist[dtwo].spdata[0,:,:]
-        else:
-            # reference channel
-            rname = self.Dlist[done].clist[0]
-            self.Dlist[dtwo].rname.append(rname)
-            XXa = self.Dlist[done].spdata[0,:,:]
-            XXb = self.Dlist[done].spdata[1,:,:]
-            print('use {:s} and {:s} for XX'.format(self.Dlist[done].clist[0], self.Dlist[done].clist[1]))
-            # cmp channel
-            pname = self.Dlist[dtwo].clist[0]
-            YYa = self.Dlist[dtwo].spdata[0,:,:]
-            YYb = self.Dlist[dtwo].spdata[1,:,:]
-            print('use {:s} and {:s} for YY'.format(self.Dlist[dtwo].clist[0], self.Dlist[dtwo].clist[1]))
+        # reference channel
+        rname = self.Dlist[done].clist[0]
+        XX = self.Dlist[done].spdata[0,:,:]
+        self.Dlist[dtwo].rname.append(rname)
+        # cmp channel
+        pname = self.Dlist[dtwo].clist[0]
+        YY = self.Dlist[dtwo].spdata[0,:,:]
 
-            # # reconstructed XX
-            # XXc = np.sqrt(np.abs(XXa * np.matrix.conjugate(XXb)).real) # amplitude of the cross power
-            # # XXc = np.abs(XXa * np.matrix.conjugate(XXb)) / (np.abs(XXa)*np.abs(XXb)) # coherence
-            # XXt = (np.arctan2(XXa.imag, XXa.real).real + np.arctan2(XXb.imag, XXb.real).real)/2.0
-            # XX = XXc * np.cos(XXt) + 1.0j * XXc * np.sin(XXt)
-            # # reconstructed YY
-            # YYc = np.sqrt(np.abs(YYa * np.matrix.conjugate(YYb)).real) # amplitude of the cross power
-            # # YYc = np.abs(YYa * np.matrix.conjugate(YYb)) / (np.abs(YYa)*np.abs(YYb)) # coherence
-            # YYt = (np.arctan2(YYa.imag, YYa.real).real + np.arctan2(YYb.imag, YYb.real).real)/2.0
-            # YY = YYc * np.cos(YYt) + 1.0j * YYc * np.sin(YYt)
+        # if cnum == 1:
+        #     # reference channel
+        #     rname = self.Dlist[done].clist[0]
+        #     XX = self.Dlist[done].spdata[0,:,:]
+        #     self.Dlist[dtwo].rname.append(rname)
+        #     # cmp channel
+        #     pname = self.Dlist[dtwo].clist[0]
+        #     YY = self.Dlist[dtwo].spdata[0,:,:]
+        # else:
+        #     # reference channel
+        #     rname = self.Dlist[done].clist[0]
+        #     self.Dlist[dtwo].rname.append(rname)
+        #     XXa = self.Dlist[done].spdata[0,:,:]
+        #     XXb = self.Dlist[done].spdata[1,:,:]
+        #     print('use {:s} and {:s} for XX'.format(self.Dlist[done].clist[0], self.Dlist[done].clist[1]))
+        #     # cmp channel
+        #     pname = self.Dlist[dtwo].clist[0]
+        #     YYa = self.Dlist[dtwo].spdata[0,:,:]
+        #     YYb = self.Dlist[dtwo].spdata[1,:,:]
+        #     print('use {:s} and {:s} for YY'.format(self.Dlist[dtwo].clist[0], self.Dlist[dtwo].clist[1]))
 
-            # reconstruction using sub averg
-            bins = XXa.shape[0]
-            sdim = 20
-            soverlap = 0.5
-            sbins = int(np.fix((int(bins/sdim) - soverlap)/(1.0 - soverlap)))
+        #     # # reconstructed XX
+        #     # XXc = np.sqrt(np.abs(XXa * np.matrix.conjugate(XXb)).real) # amplitude of the cross power
+        #     # # XXc = np.abs(XXa * np.matrix.conjugate(XXb)) / (np.abs(XXa)*np.abs(XXb)) # coherence
+        #     # XXt = (np.arctan2(XXa.imag, XXa.real).real + np.arctan2(XXb.imag, XXb.real).real)/2.0
+        #     # XX = XXc * np.cos(XXt) + 1.0j * XXc * np.sin(XXt)
+        #     # # reconstructed YY
+        #     # YYc = np.sqrt(np.abs(YYa * np.matrix.conjugate(YYb)).real) # amplitude of the cross power
+        #     # # YYc = np.abs(YYa * np.matrix.conjugate(YYb)) / (np.abs(YYa)*np.abs(YYb)) # coherence
+        #     # YYt = (np.arctan2(YYa.imag, YYa.real).real + np.arctan2(YYb.imag, YYb.real).real)/2.0
+        #     # YY = YYc * np.cos(YYt) + 1.0j * YYc * np.sin(YYt)
 
-            XXt = (np.arctan2(XXa.imag, XXa.real).real + np.arctan2(XXb.imag, XXb.real).real)/2.0
-            XX = np.zeros((sbins, XXa.shape[1]), dtype=np.complex_)
+        #     # reconstruction using sub averg
+        #     bins = XXa.shape[0]
+        #     sdim = 20
+        #     soverlap = 0.0
+        #     sbins = int(np.fix((int(bins/sdim) - soverlap)/(1.0 - soverlap)))
 
-            YYt = (np.arctan2(YYa.imag, YYa.real).real + np.arctan2(YYb.imag, YYb.real).real)/2.0
-            YY = np.zeros((sbins, YYa.shape[1]), dtype=np.complex_)
+        #     XXt = (np.arctan2(XXa.imag, XXa.real).real + np.arctan2(XXb.imag, XXb.real).real)/2.0
+        #     XX = np.zeros((sbins, XXa.shape[1]), dtype=np.complex_)
 
-            for b in range(sbins):
-                idx1 = int(b*np.fix(sdim*(1 - soverlap)))
-                idx2 = idx1 + sdim
+        #     YYt = (np.arctan2(YYa.imag, YYa.real).real + np.arctan2(YYb.imag, YYb.real).real)/2.0
+        #     YY = np.zeros((sbins, YYa.shape[1]), dtype=np.complex_)
 
-                Xc = np.sqrt(np.abs(np.mean(XXa[idx1:idx2,:]*np.matrix.conjugate(XXb[idx1:idx2,:]), 0)))
-                Xt = np.mean(XXt[idx1:idx2,:], 0)
-                XX[b,:] = Xc * np.cos(Xt) + 1.0j * Xc * np.sin(Xt)
+        #     for b in range(sbins):
+        #         idx1 = int(b*np.fix(sdim*(1 - soverlap)))
+        #         idx2 = idx1 + sdim
 
-                Yc = np.sqrt(np.abs(np.mean(YYa[idx1:idx2,:]*np.matrix.conjugate(YYb[idx1:idx2,:]), 0)))
-                Yt = np.mean(YYt[idx1:idx2,:], 0)
-                YY[b,:] = Yc * np.cos(Yt) + 1.0j * Yc * np.sin(Yt)
+        #         Xc = np.sqrt(np.abs(np.mean(XXa[idx1:idx2,:]*np.matrix.conjugate(XXb[idx1:idx2,:]), 0)))
+        #         Xt = np.mean(XXt[idx1:idx2,:], 0)
+        #         XX[b,:] = Xc * np.cos(Xt) + 1.0j * Xc * np.sin(Xt)
+
+        #         Yc = np.sqrt(np.abs(np.mean(YYa[idx1:idx2,:]*np.matrix.conjugate(YYb[idx1:idx2,:]), 0)))
+        #         Yt = np.mean(YYt[idx1:idx2,:], 0)
+        #         YY[b,:] = Yc * np.cos(Yt) + 1.0j * Yc * np.sin(Yt)
             
-            # XX = np.zeros(XXa.shape, dtype=np.complex_)
-            # XXt = (np.arctan2(XXa.imag, XXa.real).real + np.arctan2(XXb.imag, XXb.real).real)/2.0
-            # for i in range(XXa.shape[0]):
-            #     si = i
-            #     ei = i+sdim
-            #     Xc = np.sqrt(np.abs(np.mean(XXa[si:ei,:]*np.matrix.conjugate(XXb[si:ei,:]), 0)))
-            #     Xt = np.mean(XXt[si:ei,:])
-            #     XX[i,:] = Xc * np.cos(Xt) + 1.0j * Xc * np.sin(Xt)
+        #     # XX = np.zeros(XXa.shape, dtype=np.complex_)
+        #     # XXt = (np.arctan2(XXa.imag, XXa.real).real + np.arctan2(XXb.imag, XXb.real).real)/2.0
+        #     # for i in range(XXa.shape[0]):
+        #     #     si = i
+        #     #     ei = i+sdim
+        #     #     Xc = np.sqrt(np.abs(np.mean(XXa[si:ei,:]*np.matrix.conjugate(XXb[si:ei,:]), 0)))
+        #     #     Xt = np.mean(XXt[si:ei,:])
+        #     #     XX[i,:] = Xc * np.cos(Xt) + 1.0j * Xc * np.sin(Xt)
 
-            # YY = np.zeros(YYa.shape, dtype=np.complex_)
-            # YYt = (np.arctan2(YYa.imag, YYa.real).real + np.arctan2(YYb.imag, YYb.real).real)/2.0
-            # for i in range(YYa.shape[0]):
-            #     si = i
-            #     ei = i+sdim
-            #     Yc = np.sqrt(np.abs(np.mean(YYa[si:ei,:]*np.matrix.conjugate(YYb[si:ei,:]), 0)))
-            #     Yt = np.mean(YYt[si:ei,:])
-            #     YY[i,:] = Yc * np.cos(Yt) + 1.0j * Yc * np.sin(Yt)
+        #     # YY = np.zeros(YYa.shape, dtype=np.complex_)
+        #     # YYt = (np.arctan2(YYa.imag, YYa.real).real + np.arctan2(YYb.imag, YYb.real).real)/2.0
+        #     # for i in range(YYa.shape[0]):
+        #     #     si = i
+        #     #     ei = i+sdim
+        #     #     Yc = np.sqrt(np.abs(np.mean(YYa[si:ei,:]*np.matrix.conjugate(YYb[si:ei,:]), 0)))
+        #     #     Yt = np.mean(YYt[si:ei,:])
+        #     #     YY[i,:] = Yc * np.cos(Yt) + 1.0j * Yc * np.sin(Yt)
 
-            self.Dlist[done].spdata = np.expand_dims(XX, axis=0)
-            self.Dlist[dtwo].spdata = np.expand_dims(YY, axis=0)
+        #     self.Dlist[done].spdata = np.expand_dims(XX, axis=0)
+        #     self.Dlist[dtwo].spdata = np.expand_dims(YY, axis=0)
+
+        # # check bicoherence
+        # self.bicoherence(done, dtwo, cnl=[0])
+        # return 0
 
         # modeled data
         if test == 1:
@@ -934,7 +919,7 @@ class FluctAna(object):
         pax2 = ax1/1000.0 # [kHz]
 
         # linear transfer function
-        a1.plot(pax1, Lk.real, 'k')
+        a1.plot(pax1, np.abs(Lk), 'k')
         a1.set_xlabel('Frequency [kHz]')
         a1.set_ylabel('Linear transfer function')
         a1.set_title('#{:d}, {:s}-{:s} {:s}'.format(pshot, rname, pname, chpos), fontsize=10)
@@ -952,7 +937,7 @@ class FluctAna(object):
 
         # calculate rates
         if js == 1:
-            gk, Tijk, sum_Tijk = sp.nonlinear_ratesJS(Lk, Aijk, Qijk, XX, dt)
+            gk, Tijk, sum_Tijk = sp.nonlinear_ratesJS(Lk, Aijk, Qijk, XX, delta)
         else:
             gk, Tijk, sum_Tijk = sp.nonlinear_rates(Lk, Qijk, Bk, Aijk, dt)
 
@@ -966,7 +951,7 @@ class FluctAna(object):
         # linear growth rate
         a1.plot(pax1, gk, 'k')
         a1.set_xlabel('Frequency [kHz]')
-        a1.set_ylabel('Growth rate [1/s]')
+        a1.set_ylabel('Growth rate [a.b.]')
         a1.set_title('#{:d}, {:s}-{:s} {:s}'.format(pshot, rname, pname, chpos), fontsize=10)
         a1.axhline(y=0, ls='--', color='k')
         if 'xlimits' in kwargs: a1.set_xlim([xlimits[0], xlimits[1]])
@@ -974,7 +959,7 @@ class FluctAna(object):
         # Nonlinear transfer rate
         a2.plot(pax1, sum_Tijk.real, 'k')
         a2.set_xlabel('Frequency [kHz]')
-        a2.set_ylabel('Nonlinear transfer rate [1/s]')
+        a2.set_ylabel('Nonlinear transfer rate [a.b.]')
         a2.axhline(y=0, ls='--', color='k')
         if 'xlimits' in kwargs: a2.set_xlim([xlimits[0], xlimits[1]])
 
@@ -1537,7 +1522,6 @@ class FluctAna(object):
 
         plt.show()
 
-
     def spec(self, dnum=0, cnl=[0], nfft=512, **kwargs):
         if 'flimits' in kwargs: flimits = kwargs['flimits']*1000
         if 'xlimits' in kwargs: xlimits = kwargs['xlimits']
@@ -1573,15 +1557,15 @@ class FluctAna(object):
 
             plt.show()
 
-    def iplot(self, dnum, snum=0, vlimits=[-0.1, 0.1], **kwargs):
+    def iplot(self, dnum, snum=0, vlimits=[-0.1, 0.1], istep=0.002, imethod='cubic', cutoff=0.03, pmethod='scatter', **kwargs):
         # keyboard interactive iplot
-        # (intp='none', climits=[-0.1,0.1], **kwargs)
+        D = self.Dlist[dnum]
 
-        # data filtering
+        CM = plt.cm.get_cmap('RdYlBu_r')
 
-        c = raw_input('automatic, or manual [a,m]: ')
+        c = int(input('automatic, or manual [0,1]: '))
         tidx1 = 0  # starting index
-        if c == 'a':
+        if c == 0:
             # make axes
             fig = plt.figure(facecolor='w', figsize=(5,10))
             ax1 = fig.add_axes([0.1, 0.75, 0.7, 0.2])  # [left bottom width height]
@@ -1590,13 +1574,18 @@ class FluctAna(object):
             axs = [ax1, ax2, ax3]
 
             tstep = int(input('time step [idx]: '))  # jumping index # tstep = 10
-            for tidx in range(tidx1, len(self.Dlist[dnum].time), tstep):
-                # prepare data
-                pdata = self.Dlist[dnum].data[:,tidx]
+            for tidx in range(tidx1, len(D.time), tstep):
+                # take data and channel position
+                pdata = D.data[:,tidx]
+                rpos = D.rpos[:]
+                zpos = D.zpos[:]
 
-                # position
-                rpos = self.Dlist[dnum].rpos[:]
-                zpos = self.Dlist[dnum].zpos[:]
+                # fill bad channel
+                pdata = ms.fill_bad_channel(pdata, rpos, zpos, D.good_channels, cutoff)
+
+                # interpolation
+                if istep > 0:
+                    ri, zi, pi = ms.interp_pdata(pdata, rpos, zpos, istep, imethod)
 
                 # plot
                 axs[0].cla()
@@ -1604,15 +1593,21 @@ class FluctAna(object):
                 axs[2].cla()
                 plt.ion()
 
-                axs[0].plot(self.Dlist[dnum].time, self.Dlist[dnum].data[snum,:])  # ax1.hold(True)
-                axs[0].axvline(x=self.Dlist[dnum].time[tidx], color='g')
-                sc = axs[1].scatter(rpos, zpos, 500, pdata, marker='s', vmin=vlimits[0], vmax=vlimits[1], cmap=CM)
+                axs[0].plot(D.time, D.data[snum,:])  # ax1.hold(True)
+                axs[0].axvline(x=D.time[tidx], color='g')
+                if istep > 0:
+                    if pmethod == 'scatter':
+                        im = axs[1].scatter(ri.ravel(), zi.ravel(), 5, pi.ravel(), marker='s', vmin=vlimits[0], vmax=vlimits[1], cmap=CM, edgecolors='none')
+                    elif pmethod == 'contour':
+                        im = axs[1].contourf(ri, zi, pi, 50, cmap=CM)
+                else:
+                    im = axs[1].scatter(rpos, zpos, 500, pdata, marker='s', vmin=vlimits[0], vmax=vlimits[1], cmap=CM, edgecolors='none')
                 axs[1].set_aspect('equal')
-                plt.colorbar(sc, cax=axs[2])
+                plt.colorbar(im, cax=axs[2])
 
                 axs[1].set_xlabel('R [m]')
                 axs[1].set_ylabel('z [m]')
-                axs[1].set_title('ECE image')
+                axs[1].set_title('ECE image at t = {:g} sec'.format(D.time[tidx]))
 
                 plt.show()
                 plt.pause(0.1)
@@ -1620,22 +1615,29 @@ class FluctAna(object):
             plt.ioff()
             plt.close()
 
-        elif c == 'm':
+        elif c == 1:
             tidx = tidx1
+            print('Select a point in the top axes to plot the image')
+            
+            # make axes
+            fig = plt.figure(facecolor='w', figsize=(5,10))
+            ax1 = fig.add_axes([0.1, 0.75, 0.7, 0.2])  # [left bottom width height]
+            ax2 = fig.add_axes([0.1, 0.1, 0.7, 0.60])
+            ax3 = fig.add_axes([0.83, 0.1, 0.03, 0.6])
+            axs = [ax1, ax2, ax3]
             while True:
-                # make axes
-                fig = plt.figure(facecolor='w', figsize=(5,10))
-                ax1 = fig.add_axes([0.1, 0.75, 0.7, 0.2])  # [left bottom width height]
-                ax2 = fig.add_axes([0.1, 0.1, 0.7, 0.60])
-                ax3 = fig.add_axes([0.83, 0.1, 0.03, 0.6])
-                axs = [ax1, ax2, ax3]
 
-                # prepare data
-                pdata = self.Dlist[dnum].data[:,tidx]
+                # take data and channel position
+                pdata = D.data[:,tidx]
+                rpos = D.rpos[:]
+                zpos = D.zpos[:]
 
-                # position
-                rpos = self.Dlist[dnum].rpos[:]
-                zpos = self.Dlist[dnum].zpos[:]
+                # fill bad channel
+                pdata = ms.fill_bad_channel(pdata, rpos, zpos, D.good_channels, cutoff)
+
+                # interpolation
+                if istep > 0:
+                    ri, zi, pi = ms.interp_pdata(pdata, rpos, zpos, istep, imethod)
 
                 # plot
                 axs[0].cla()
@@ -1643,35 +1645,52 @@ class FluctAna(object):
                 axs[2].cla()
                 plt.ion()
 
-                axs[0].plot(self.Dlist[dnum].time, self.Dlist[dnum].data[snum,:])  # ax1.hold(True)
-                axs[0].axvline(x=self.Dlist[dnum].time[tidx], color='g')
-                sc = axs[1].scatter(rpos, zpos, 500, pdata, marker='s', vmin=vlimits[0], vmax=vlimits[1], cmap=CM)
+                axs[0].plot(D.time, D.data[snum,:])  # ax1.hold(True)
+                axs[0].axvline(x=D.time[tidx], color='g')
+                if istep > 0:
+                    if pmethod == 'scatter':
+                        im = axs[1].scatter(ri.ravel(), zi.ravel(), 5, pi.ravel(), marker='s', vmin=vlimits[0], vmax=vlimits[1], cmap=CM, edgecolors='none')
+                    elif pmethod == 'contour':
+                        im = axs[1].contourf(ri, zi, pi, 50, cmap=CM)
+                else:
+                    im = axs[1].scatter(rpos, zpos, 500, pdata, marker='s', vmin=vlimits[0], vmax=vlimits[1], cmap=CM, edgecolors='none')
                 axs[1].set_aspect('equal')
-                plt.colorbar(sc, cax=axs[2])
+                plt.colorbar(im, cax=axs[2])
 
                 axs[1].set_xlabel('R [m]')
                 axs[1].set_ylabel('z [m]')
-                axs[1].set_title('ECE image')
+                axs[1].set_title('ECE image at t = {:g} sec'.format(D.time[tidx]))
 
                 plt.show()
 
-                k = raw_input('set time step [idx][+,-,0]: ')
-                try:
-                    tstep = int(k)
-                    if tstep == 0:
-                        plt.ioff()
-                        plt.close()
-                        break
-                except:
-                    pass
+                ## mouse input
+                g = plt.ginput(1)[0][0]
+                if g >= D.time[0] and g <= D.time[-1]:
+                    tidx = np.where(D.time > g)[0][0]
+                else:
+                    print('Out of the time range')
+                    plt.ioff()
+                    plt.close()
+                    break
 
-                if tidx + tstep < len(self.Dlist[dnum].time) - 1 and 0 < tidx + tstep:
-                    tidx = tidx + tstep
+                ## keyboard input 
+                # k = input('set time step [idx][+,-,0]: ')
+                # try:
+                #     tstep = int(k)
+                #     if tstep == 0:
+                #         plt.ioff()
+                #         plt.close()
+                #         break
+                # except:
+                #     pass
+
+                # if tidx + tstep < len(D.time) - 1 and 0 < tidx + tstep:
+                #     tidx = tidx + tstep
 
                 plt.ioff()
-                plt.close()
+            plt.close()
 
-        self.Dlist[dnum].pdata = pdata
+        D.pdata = pdata
 
 ############################# test functions ###################################
 
