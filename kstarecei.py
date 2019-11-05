@@ -19,10 +19,13 @@ VN = 24  # number of vertical arrays
 
 
 class KstarEcei(object):
-    def __init__(self, shot, clist, data_path=None):
+    def __init__(self, shot, clist, data_path=None, cfg=None):
         self.shot = shot
         
-        if data_path is not None:
+        if cfg is not None:
+            #TODO: Change to something more informative?
+            self.data_path = 'adios_streaming'
+        elif data_path is not None:
             self.data_path = data_path
         else:
             if 5073 < shot and shot < 6393:
@@ -58,28 +61,13 @@ class KstarEcei(object):
             self.fname = "{:s}{:06d}/ECEI.{:06d}.{:s}.h5".format(self.data_path, shot, shot, self.dev)
 
         # get attributes
-        with h5py.File(self.fname, 'r') as f:
-            # get attributes
-            dset = f['ECEI']
-            self.tt = dset.attrs['TriggerTime'] # in [s]
-            self.toff = self.tt[0]+0.001
-            self.fs = dset.attrs['SampleRate'][0]*1000.0  # in [Hz] same sampling rate
-            self.itf = dset.attrs['TFcurrent']*1.0e3  # [A]
-            try:
-                self.mode = dset.attrs['Mode'].strip().decode()
-                if self.mode == 'O':
-                    self.hn = 1  # harmonic number
-                elif self.mode == 'X':
-                    self.hn = 2
-            except:
-                print('#### no Mode attribute in file, default: 2nd X-mode ####')
-                self.mode = 'X'
-                self.hn = 2
-            self.lo = dset.attrs['LoFreq']
-            self.sf = dset.attrs['LensFocus']
-            self.sz = dset.attrs['LensZoom']
-
-            print('ECEI file = {}'.format(self.fname))
+        if cfg is not None:
+            self.read_init(cfg)
+        else:
+            with h5py.File(self.fname, 'r') as f:
+                # get attributes
+                dset = f['ECEI']
+                self.read_init(dset.attrs)
 
         # data quality
         self.good_channels = np.ones(len(self.clist))
@@ -90,6 +78,28 @@ class KstarEcei(object):
 
         # get channel posistion
         self.channel_position()
+
+    def read_init(self,dset):
+        self.tt = dset.attrs['TriggerTime'] # in [s]
+        self.toff = self.tt[0]+0.001
+        self.fs = dset.attrs['SampleRate'][0]*1000.0  # in [Hz] same sampling rate
+        self.itf = dset.attrs['TFcurrent']*1.0e3  # [A]
+        try:
+            self.mode = dset.attrs['Mode'].strip().decode()
+            if self.mode == 'O':
+                self.hn = 1  # harmonic number
+            elif self.mode == 'X':
+                self.hn = 2
+        except:
+            print('#### no Mode attribute in file, default: 2nd X-mode ####')
+            self.mode = 'X'
+            self.hn = 2
+        self.lo = dset.attrs['LoFreq']
+        self.sf = dset.attrs['LensFocus']
+        self.sz = dset.attrs['LensZoom']
+
+        print('ECEI file = {}'.format(self.fname))
+
 
     def get_data(self, trange, norm=1, atrange=[1.0, 1.01], res=0, verbose=1):
         self.trange = trange
