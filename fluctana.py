@@ -501,17 +501,16 @@ class FluctAna(object):
                 self.Dlist[dtwo].rname.append(self.Dlist[done].clist[done_subset[c]])
 
             # calculate cross power for each channel and each bins
-            for b in range(bins):
-                if rnum == 1:  # single reference channel
-                    X = self.Dlist[done].spdata[done_subset[0],b,:]
-                else:  # number of ref channels = number of cmp channels
-                    X = self.Dlist[done].spdata[done_subset[c],b,:]
+            if rnum == 1:  # single reference channel
+                X = self.Dlist[done].spdata[done_subset[0],:,:]
+            else:  # number of ref channels = number of cmp channels
+                X = self.Dlist[done].spdata[done_subset[c],:,:]
 
-                Y = self.Dlist[dtwo].spdata[dtwo_subset[c],b,:]
+            Y = self.Dlist[dtwo].spdata[dtwo_subset[c],:,:]
 
-                val[b,:] = np.fft.ifftshift(X*np.matrix.conjugate(Y) / win_factor)
-                val[b,:] = np.fft.ifft(val[b,:], n=nfft)*nfft
-                val[b,:] = np.fft.fftshift(val[b,:])
+            val = np.fft.ifftshift(X*np.matrix.conjugate(Y) / win_factor,axes=-1)
+            val = np.fft.ifft(val, n=nfft,axis=-1)*nfft
+            val = np.fft.fftshift(val,axes=-1)
 
             # average over bins
             Cxy = np.mean(val, 0)
@@ -567,14 +566,14 @@ class FluctAna(object):
 
             Y = self.Dlist[dtwo].spdata[dtwo_subset[c],:,:]
 
-            x = np.fft.ifft(np.fft.ifftshift(X,axis=-1), n=nfft, axis=-1)*nfft/np.sqrt(win_factor)
+            x = np.fft.ifft(np.fft.ifftshift(X,axes=-1), n=nfft, axis=-1)*nfft/np.sqrt(win_factor)
             Rxx = np.mean(x**2,axis=-1)
-            y = np.fft.ifft(np.fft.ifftshift(Y,axis=-1), n=nfft, axis=-1)*nfft/np.sqrt(win_factor)
+            y = np.fft.ifft(np.fft.ifftshift(Y,axes=-1), n=nfft, axis=-1)*nfft/np.sqrt(win_factor)
             Ryy = np.mean(y**2,axis=-1)
 
-            val = np.fft.ifftshift(X*np.matrix.conjugate(Y) / win_factor, axis=-1)
+            val = np.fft.ifftshift(X*np.matrix.conjugate(Y) / win_factor, axes=-1)
             val = np.fft.ifft(val, n=nfft, axis=-1)*nfft
-            val = np.fft.fftshift(val,axis=-1)
+            val = np.fft.fftshift(val,axes=-1)
 
             val = np.einsum('ij,i->ij',val,1./np.sqrt(Rxx*Ryy))
 
