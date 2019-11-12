@@ -785,11 +785,12 @@ class FluctAna(object):
             dtwo_subset = range(cnum)
 
         # plot dimension
-        if cnum < 4:
-            row = cnum
-        else:
-            row = 4
-        col = math.ceil(cnum/row)
+        if plot:
+            if cnum < 4:
+                row = cnum
+            else:
+                row = 4
+            col = math.ceil(cnum/row)
 
         # reference channel names
         self.Dlist[dtwo].rname = []

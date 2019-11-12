@@ -80,12 +80,12 @@ class KstarEcei(object):
         self.channel_position()
 
     def read_init(self,dset):
-        self.tt = dset.attrs['TriggerTime'] # in [s]
+        self.tt = dset['TriggerTime'] # in [s]
         self.toff = self.tt[0]+0.001
-        self.fs = dset.attrs['SampleRate'][0]*1000.0  # in [Hz] same sampling rate
-        self.itf = dset.attrs['TFcurrent']*1.0e3  # [A]
+        self.fs = dset['SampleRate'][0]*1000.0  # in [Hz] same sampling rate
+        self.itf = dset['TFcurrent']*1.0e3  # [A]
         try:
-            self.mode = dset.attrs['Mode'].strip().decode()
+            self.mode = dset['Mode'].strip().decode()
             if self.mode == 'O':
                 self.hn = 1  # harmonic number
             elif self.mode == 'X':
@@ -94,9 +94,9 @@ class KstarEcei(object):
             print('#### no Mode attribute in file, default: 2nd X-mode ####')
             self.mode = 'X'
             self.hn = 2
-        self.lo = dset.attrs['LoFreq']
-        self.sf = dset.attrs['LensFocus']
-        self.sz = dset.attrs['LensZoom']
+        self.lo = dset['LoFreq']
+        self.sf = dset['LensFocus']
+        self.sz = dset['LensZoom']
 
         print('ECEI file = {}'.format(self.fname))
 
