@@ -8,8 +8,32 @@ from fluctana import *
 #TODO: Integrate with Ralph. For now assume cfg the adios2 object for initial, 
 #one-off configuration read in, and fstream the adios2 object for data stream
 #cfg will include BOTH attrs found in ECEi HDF5 files AND analysis config
-cfg = read_cfg()
-fstream = read_stream()
+#TODO Split cfg so reading ECEi params from streaming data, FFT params from local config (?)
+class read_stream(object):
+    def __init__(self,shot,nchunk,data_path='./'):
+        self.dobj = KstarEcei(shot=shot,data_path=filedir,clist=['ECEI_L0101-2408'])
+        self.time = self.dobj.time_base()
+        tstarts = self.time[::nchunk]
+        tstops = self.time[nchunk-1::nchunk]
+        if tstarts.size>tstops.size: tstarts = tstarts[:-1]
+        self.timeiter = iter(zip(tstarts,tstops))
+
+    def get_data(self):
+        trange = next(self.timeiter)
+        _,data = self.dobj.get_data(trange=trange,norm=1,verbose=0)
+        return trange,data
+
+debug = True
+if debug:
+    shot = 18431; nchunk=10000
+    fstream = read_stream(shot=shot)
+    cfg = {'shot':shot,'nfft':1000,'window':'hann','overlap':0.2,'detrend':1,
+           'tt',fstream.dobj.tt,'toff',fstream.dobj.toff,'fs',fstream.dobj.fs,
+           'itf',fstream.dobj.itf,'mode',fstream.dobj.mode,'hn`',fstream.dobj.hn,
+           'lo',fstream.dobj.lo,'sf',fstream.dobj.sf,'sz',fstream.dobj.sz}
+else:
+    cfg = read_cfg()
+    fstream = read_stream()
 
 #TODO: Will stream metadata at beginning also? Or how will we pass? For now assume
 #it has all parameters, accessible from cfg
@@ -18,31 +42,31 @@ fstream = read_stream()
 NV = 24
 NR = 8
 
-#TODO: Need to read in METADATA file
 A = FluctAna()
 #TODO: Modify so it can take in a cfg set
-dobjAll = KstarEcei(cfg=cfg,clist=['ECEI_L0101-2408'])
+dobjAll = KstarEcei(shot=cfg['shot'],cfg=cfg,clist=['ECEI_L0101-2408'])
+
+#TODO: Placeholder for data saving
+def save_spec(A):
+    pass
 
 #TODO: Determine if for loops can be avoided (I dont think currecnt fluctana
 #structure easily allows)
 for i,chunk in enumerate(fstream):
     #TODO: what is the right adios2 calls for this? Look at Ralphs
-    data = fstream.get_data()
+    trange,data = fstream.get_data()
     #TODO: Determine how to get time range of adios2 chunk
-    trange = fstream.get_time()
+    #trange = fstream.get_trange()
     #TODO: Do we want norm here for all analyses?
     if i==0:
-        A.add_data(dobjAll,trange=trange,norm=1)
-    else:
-        A.Dlist[0].data = data
-        #TODO: Add new time info here so it is saved 
+        A.Dlist.append(dobjAll)    
+    A.Dlist[0].data = data
+    #TODO: Add new time info here so it is saved 
 
     A.fftbins(nfft=cfg['nfft'],window=cfg['window'],
               overlap=cfg['overlap'],detrend=cfg['detrend'],full=1)
 
     #perform the various spectral analyses from fluctana
-    #TODO: Currently n^2, could be 2x more efficient by subsetting the dataset
-    #TODO: Subsetting would avoid the 2nd datasset creation, FFT
     for iv in range(NV):
         for ir in range(NR):
             #TODO: Generalize clist input (should take ECEi L,H,G systems)
