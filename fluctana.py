@@ -262,7 +262,7 @@ class FluctAna(object):
             else:
                 D.nfft = nfft
 
-            if verbose: print('dnum {:d} fftbins {:d} with {:s} size {:d} overlap {:g} detrend {:d} full {:d}'.format(d, bins, window, nfft, overlap, detrend, full))
+            if self.verbose: print('dnum {:d} fftbins {:d} with {:s} size {:d} overlap {:g} detrend {:d} full {:d}'.format(d, bins, window, nfft, overlap, detrend, full))
 
     def cwt(self, df): ## problem in recovering the signal
         for d, D in enumerate(self.Dlist):
