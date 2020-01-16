@@ -43,16 +43,16 @@ class FluctData(object):
         self.zpos = zpos # 1XM [channel]
         self.apos = apos # 1XM [channel]
 
-    def get_data(self, trange, norm=1, atrange=[1.0, 1.01], res=0, verbose=1):
+    def get_data(self, trange, norm=1, atrange=[1.0, 1.01], res=0, verbose=True):
         # trim, normalize data
         self.trange = trange
 
         if norm == 0:
-            if verbose == 1: print('Data is not normalized')
+            if verbose: print('Data is not normalized')
         elif norm == 1:
-            if verbose == 1: print('Data is normalized by trange average')
+            if verbose: print('Data is normalized by trange average')
         elif norm == 2:
-            if verbose == 1: print('Data is normalized by atrange average')
+            if verbose: print('Data is normalized by atrange average')
 
         # trim time
         time, idx1, idx2 = self.time_base(trange)
@@ -93,12 +93,13 @@ class FluctData(object):
         
 
 class FluctAna(object):
-    def __init__(self):
+    def __init__(self,verbose=True):
         self.Dlist = []
+        self.verbose=verbose
+        
+    def add_data(self, D, trange, norm=1, atrange=[1.0, 1.01], res=0):
 
-    def add_data(self, D, trange, norm=1, atrange=[1.0, 1.01], res=0, verbose=1):
-
-        D.get_data(trange, norm=norm, atrange=atrange, res=res, verbose=verbose)
+        D.get_data(trange, norm=norm, atrange=atrange, res=res, verbose=self.verbose)
         self.Dlist.append(D)
 
     def del_data(self, dnum):
@@ -261,7 +262,7 @@ class FluctAna(object):
             else:
                 D.nfft = nfft
 
-            print('dnum {:d} fftbins {:d} with {:s} size {:d} overlap {:g} detrend {:d} full {:d}'.format(d, bins, window, nfft, overlap, detrend, full))
+            if verbose: print('dnum {:d} fftbins {:d} with {:s} size {:d} overlap {:g} detrend {:d} full {:d}'.format(d, bins, window, nfft, overlap, detrend, full))
 
     def cwt(self, df): ## problem in recovering the signal
         for d, D in enumerate(self.Dlist):

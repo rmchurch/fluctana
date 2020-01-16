@@ -19,9 +19,10 @@ VN = 24  # number of vertical arrays
 
 
 class KstarEcei(object):
-    def __init__(self, shot, clist, data_path=None, cfg=None):
+    def __init__(self, shot, clist, data_path=None, cfg=None, verbose=True):
         self.shot = shot
-        
+        self.verbose = verbose
+               
         if cfg is not None:
             #TODO: Change to something more informative?
             self.data_path = 'adios_streaming'
@@ -219,17 +220,17 @@ class KstarEcei(object):
                 ref = 100            
             if ref > 30:
                 self.good_channels[c] = 0
-                print('LOW signal level channel {:s}, ref = {:g}%, siglevel = {:g} V'.format(self.clist[c], ref, self.siglev[c]))
+                if self.verbose: print('LOW signal level channel {:s}, ref = {:g}%, siglevel = {:g} V'.format(self.clist[c], ref, self.siglev[c]))
             
             # check bottom saturation
             if self.offstd[c] < 0.001:
                 self.good_channels[c] = 0
-                print('SAT offset data  channel {:s}, offstd = {:g}%, offlevel = {:g} V'.format(self.clist[c], self.offstd[c], self.offlev[c]))
+                if self.verbose: print('SAT offset data  channel {:s}, offstd = {:g}%, offlevel = {:g} V'.format(self.clist[c], self.offstd[c], self.offlev[c]))
 
             # check top saturation.               
             if self.sigstd[c] < 0.001:
                 self.good_channels[c] = 0
-                print('SAT signal data  channel {:s}, offstd = {:g}%, siglevel = {:g} V'.format(self.clist[c], self.sigstd[c], self.siglev[c]))
+                if self.verbose: print('SAT signal data  channel {:s}, offstd = {:g}%, siglevel = {:g} V'.format(self.clist[c], self.sigstd[c], self.siglev[c]))
 
     def channel_position(self):
         # get self.rpos, self.zpos, self.apos
