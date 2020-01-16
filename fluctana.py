@@ -43,16 +43,16 @@ class FluctData(object):
         self.zpos = zpos # 1XM [channel]
         self.apos = apos # 1XM [channel]
 
-    def get_data(self, trange, norm=1, atrange=[1.0, 1.01], res=0, verbose=1):
+    def get_data(self, trange, norm=1, atrange=[1.0, 1.01], res=0, verbose=True):
         # trim, normalize data
         self.trange = trange
 
         if norm == 0:
-            if verbose == 1: print('Data is not normalized')
+            if verbose: print('Data is not normalized')
         elif norm == 1:
-            if verbose == 1: print('Data is normalized by trange average')
+            if verbose: print('Data is normalized by trange average')
         elif norm == 2:
-            if verbose == 1: print('Data is normalized by atrange average')
+            if verbose: print('Data is normalized by atrange average')
 
         # trim time
         time, idx1, idx2 = self.time_base(trange)
@@ -93,12 +93,13 @@ class FluctData(object):
         
 
 class FluctAna(object):
-    def __init__(self):
+    def __init__(self,verbose=True):
         self.Dlist = []
+        self.verbose=verbose
+        
+    def add_data(self, D, trange, norm=1, atrange=[1.0, 1.01], res=0):
 
-    def add_data(self, D, trange, norm=1, atrange=[1.0, 1.01], res=0, verbose=1):
-
-        D.get_data(trange, norm=norm, atrange=atrange, res=res, verbose=verbose)
+        D.get_data(trange, norm=norm, atrange=atrange, res=res, verbose=self.verbose)
         self.Dlist.append(D)
 
     def del_data(self, dnum):
@@ -261,7 +262,7 @@ class FluctAna(object):
             else:
                 D.nfft = nfft
 
-            print('dnum {:d} fftbins {:d} with {:s} size {:d} overlap {:g} detrend {:d} full {:d}'.format(d, bins, window, nfft, overlap, detrend, full))
+            if verbose: print('dnum {:d} fftbins {:d} with {:s} size {:d} overlap {:g} detrend {:d} full {:d}'.format(d, bins, window, nfft, overlap, detrend, full))
 
     def cwt(self, df): ## problem in recovering the signal
         for d, D in enumerate(self.Dlist):
@@ -501,17 +502,16 @@ class FluctAna(object):
                 self.Dlist[dtwo].rname.append(self.Dlist[done].clist[done_subset[c]])
 
             # calculate cross power for each channel and each bins
-            for b in range(bins):
-                if rnum == 1:  # single reference channel
-                    X = self.Dlist[done].spdata[done_subset[0],b,:]
-                else:  # number of ref channels = number of cmp channels
-                    X = self.Dlist[done].spdata[done_subset[c],b,:]
+            if rnum == 1:  # single reference channel
+                X = self.Dlist[done].spdata[done_subset[0],:,:]
+            else:  # number of ref channels = number of cmp channels
+                X = self.Dlist[done].spdata[done_subset[c],:,:]
 
-                Y = self.Dlist[dtwo].spdata[dtwo_subset[c],b,:]
+            Y = self.Dlist[dtwo].spdata[dtwo_subset[c],:,:]
 
-                val[b,:] = np.fft.ifftshift(X*np.matrix.conjugate(Y) / win_factor)
-                val[b,:] = np.fft.ifft(val[b,:], n=nfft)*nfft
-                val[b,:] = np.fft.fftshift(val[b,:])
+            val = np.fft.ifftshift(X*np.matrix.conjugate(Y) / win_factor,axes=-1)
+            val = np.fft.ifft(val, n=nfft,axis=-1)*nfft
+            val = np.fft.fftshift(val,axes=-1)
 
             # average over bins
             Cxy = np.mean(val, 0)
@@ -559,24 +559,24 @@ class FluctAna(object):
                 self.Dlist[dtwo].rname.append(self.Dlist[done].clist[done_subset[c]])
 
             # calculate cross power for each channel and each bins
-            for b in range(bins):
-                if rnum == 1:  # single reference channel
-                    X = self.Dlist[done].spdata[done_subset[0],b,:]
-                else:  # number of ref channels = number of cmp channels
-                    X = self.Dlist[done].spdata[done_subset[c],b,:]
+#            for b in range(bins):
+            if rnum == 1:  # single reference channel
+                X = self.Dlist[done].spdata[done_subset[0],:,:] #bins in axis=1
+            else:  # number of ref channels = number of cmp channels
+                X = self.Dlist[done].spdata[done_subset[c],:,:]
 
-                Y = self.Dlist[dtwo].spdata[dtwo_subset[c],b,:]
+            Y = self.Dlist[dtwo].spdata[dtwo_subset[c],:,:]
 
-                x = np.fft.ifft(np.fft.ifftshift(X), n=nfft)*nfft/np.sqrt(win_factor)
-                Rxx = np.mean(x**2)
-                y = np.fft.ifft(np.fft.ifftshift(Y), n=nfft)*nfft/np.sqrt(win_factor)
-                Ryy = np.mean(y**2)
+            x = np.fft.ifft(np.fft.ifftshift(X,axes=-1), n=nfft, axis=-1)*nfft/np.sqrt(win_factor)
+            Rxx = np.mean(x**2,axis=-1)
+            y = np.fft.ifft(np.fft.ifftshift(Y,axes=-1), n=nfft, axis=-1)*nfft/np.sqrt(win_factor)
+            Ryy = np.mean(y**2,axis=-1)
 
-                val[b,:] = np.fft.ifftshift(X*np.matrix.conjugate(Y) / win_factor)
-                val[b,:] = np.fft.ifft(val[b,:], n=nfft)*nfft
-                val[b,:] = np.fft.fftshift(val[b,:])
+            val = np.fft.ifftshift(X*np.matrix.conjugate(Y) / win_factor, axes=-1)
+            val = np.fft.ifft(val, n=nfft, axis=-1)*nfft
+            val = np.fft.fftshift(val,axes=-1)
 
-                val[b,:] = val[b,:]/np.sqrt(Rxx*Ryy)
+            val = np.einsum('ij,i->ij',val,1./np.sqrt(Rxx*Ryy))
 
             # average over bins
             cxy = np.mean(val, 0)
