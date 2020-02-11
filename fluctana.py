@@ -226,7 +226,7 @@ class FluctAna(object):
 
 ############################# spectral methods #############################
 
-    def fftbins(self, nfft, window, overlap, detrend, full=0):
+    def fftbins(self, nfft, window, overlap, detrend, full=0, scipy=False):
         # IN : self, data set number, nfft, window name, detrend or not
         # OUT : bins x N FFT of time series data; frequency axis
         # self.list_data()
@@ -243,18 +243,33 @@ class FluctAna(object):
             D.bins = bins
 
             # make fft data
-            cnum = len(D.data)
-            if full == 1: # full shift to -fN ~ 0 ~ fN
-                if np.mod(nfft, 2) == 0:  # even nfft
-                    D.spdata = np.zeros((cnum, bins, nfft+1), dtype=np.complex_)
-                else:  # odd nfft
-                    D.spdata = np.zeros((cnum, bins, nfft), dtype=np.complex_)
-            else: # half 0 ~ fN
-                D.spdata = np.zeros((cnum, bins, int(nfft/2+1)), dtype=np.complex_)
+            if scipy:
+                #scipy STFT ~10x faster
+                if np.mod(nfft,2)==0: nfft = nfft + 1
+                if detrend: 
+                    detrendstr = 'linear'
+                else:
+                    detrendstr = 'constant'
+                D.ax,_,D.spdata = signal.stft(D.data,window=window,nperseg=nfft, 
+                                                     nfft=nfft, noverlap=int(overlap*nfft),
+                                                     detrend=detrendstr,return_onesided=not full,
+                                                     boundary=None)
+                #stft writes out (Nchannels,Nfft,Nbins), transpose to (Nchannels,Nbins,Nfft)
+                D.spdata = np.transpose(D.spdata,(0,2,1))
+                D.win_factor = np.mean(win**2)
+            else:
+                cnum = len(D.data)
+                if full == 1: # full shift to -fN ~ 0 ~ fN
+                    if np.mod(nfft, 2) == 0:  # even nfft
+                        D.spdata = np.zeros((cnum, bins, nfft+1), dtype=np.complex_)
+                    else:  # odd nfft
+                        D.spdata = np.zeros((cnum, bins, nfft), dtype=np.complex_)
+                else: # half 0 ~ fN
+                    D.spdata = np.zeros((cnum, bins, int(nfft/2+1)), dtype=np.complex_)
 
-            for c in range(cnum):
-                x = D.data[c,:]
-                D.ax, D.spdata[c,:,:], D.win_factor = sp.fftbins(x, dt, nfft, window, overlap, detrend, full)
+                for c in range(cnum):
+                    x = D.data[c,:]
+                    D.ax, D.spdata[c,:,:], D.win_factor = sp.fftbins(x, dt, nfft, window, overlap, detrend, full)
 
             # update attributes
             if np.mod(nfft, 2) == 0:
